@@ -5,6 +5,7 @@ import {
   DirectionsRenderer,
   Circle,
   MarkerClusterer,
+  Polygon,
 } from "@react-google-maps/api";
 import Places from "./places";
 import Distance from "./distance";
@@ -22,12 +23,21 @@ export default function Map() {
     () => ({ lat:-34.84, lng: -58.49 }),
     []
   );
+  const polygonRef = useRef(null);
+  const listenersRef = useRef([]);
+  const [path, setPath] = useState([
+    { lat: -34.57, lng: -58.42 },
+    { lat: -34.58, lng: -58.46 },
+    { lat: -34.60, lng: -58.48 },
+    { lat: -34.60, lng: -58.43 }
+  ]);
   
   const options = useMemo<MapOptions>(
     () => ({
       mapId: "b181cac70f27f5e6",
       disableDefaultUI: true,
       clickableIcons: true,
+      zoomControl: true
     }),
     []
   );
@@ -58,6 +68,38 @@ export default function Map() {
     Tambien hace un zoom en la posicion de origen
    */
 
+    const onEdit = useCallback(() => {
+      if (polygonRef.current) {
+        const nextPath = polygonRef.current
+          .getPath()
+          .getArray()
+          .map(latLng => {
+            return { lat: latLng.lat(), lng: latLng.lng() };
+          });
+        setPath(nextPath);
+      }
+    }, [setPath]);
+  
+    // Bind refs to current Polygon and listeners
+    const onLoadPoly = useCallback(
+      polygon => {
+        polygonRef.current = polygon;
+        const path = polygon.getPath();
+        listenersRef.current.push(
+          path.addListener("set_at", onEdit),
+          path.addListener("insert_at", onEdit),
+          path.addListener("remove_at", onEdit)
+        );
+      },
+      [onEdit]
+    );
+  
+    // Clean up refs
+    const onUnmount = useCallback(() => {
+      listenersRef.current.forEach(lis => lis.remove());
+      polygonRef.current = null;
+    }, []);
+
 
   return (
     <div className="container">
@@ -83,6 +125,18 @@ export default function Map() {
           options={options}
           onLoad={onLoad}
         >
+          <Polygon
+            // Make the Polygon editable / draggable
+            editable
+            draggable
+            path={path}
+            // Event used when manipulating and adding points
+            onMouseUp={onEdit}
+            // Event used when dragging the whole Polygon
+            onDragEnd={onEdit}
+            onLoad={onLoadPoly}
+            onUnmount={onUnmount}
+          />
           {directions && (
             <DirectionsRenderer
               directions={directions}
